@@ -38,6 +38,7 @@ from optimum.intel.openvino import (
 )
 from optimum.utils.import_utils import is_torch_available, is_diffusers_available
 
+
 try:
     from optimum.exporters.onnx.__main__ import (
         _get_submodels_and_onnx_configs as _get_submodels_and_export_configs,
@@ -165,7 +166,7 @@ def convert_optimum_causallm_base(model, args, model_config=None, compress_only=
             output_names=files_subpaths,
             input_shapes=dummy_shapes,
             device="cpu",
-            compression_option="fp16" if args.precision == "FP16" else None,
+            # compression_option="fp16" if args.precision == "FP16" else None,  # deprecated in optimum-intel 1.17
             model_kwargs={},
             stateful=not args.disable_stateful,
         )

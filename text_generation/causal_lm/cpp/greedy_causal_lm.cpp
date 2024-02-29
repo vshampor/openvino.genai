@@ -2,6 +2,8 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <openvino/openvino.hpp>
+#include <chrono>
+#include <algorithm>
 
 namespace {
 std::pair<ov::Tensor, ov::Tensor> tokenize(ov::InferRequest& tokenizer, std::string&& prompt) {
@@ -55,8 +57,8 @@ struct TextStreamer {
 }
 
 int main(int argc, char* argv[]) try {
-    if (argc != 3) {
-        throw std::runtime_error(std::string{"Usage: "} + argv[0] + " <MODEL_DIR> '<PROMPT>'");
+    if (argc != 4) {
+        throw std::runtime_error(std::string{"Usage: "} + argv[0] + " <MODEL_DIR> '<PROMPT>' <PLUGIN>");
     }
     // Compile models
     ov::Core core;
@@ -68,8 +70,14 @@ int main(int argc, char* argv[]) try {
     ov::InferRequest detokenizer = core.compile_model(
         std::string{argv[1]} + "/openvino_detokenizer.xml", "CPU").create_infer_request();
     // The model can be compiled for GPU as well
+
     ov::InferRequest lm = core.compile_model(
-        std::string{argv[1]} + "/openvino_model.xml", "CPU").create_infer_request();
+        std::string{argv[1]} + "/openvino_model.xml",
+        argv[3],
+        //ov::device::properties("LLAMA_CPP", ov::cache_dir("/tmp/my_lcp_cache_dir"))
+        //ov::device::properties("LLAMA_CPP_CUDA", ov::cache_dir("/tmp/my_lcp_cache_dir_cuda"))
+        ).create_infer_request();
+    //        std::string{argv[1]} + "/openvino_model.xml", argv[3]).create_infer_request();
     // Initialize inputs
     lm.set_tensor("input_ids", input_ids);
     lm.set_tensor("attention_mask", attention_mask);
@@ -91,16 +99,25 @@ int main(int argc, char* argv[]) try {
     TextStreamer text_streamer{std::move(detokenizer)};
     // There's no way to extract special token values from the detokenizer for now
     constexpr int64_t SPECIAL_EOS_TOKEN = 2;
-    while (out_token != SPECIAL_EOS_TOKEN) {
+    constexpr size_t hard_stop_token_count = 128;
+    std::vector<float> inference_times_s(hard_stop_token_count);
+    size_t cnt = 0;
+    std::vector<size_t> out_token_ids;
+    while (out_token != SPECIAL_EOS_TOKEN && cnt < hard_stop_token_count) {
         lm.get_tensor("input_ids").data<int64_t>()[0] = out_token;
         lm.get_tensor("attention_mask").set_shape({BATCH_SIZE, lm.get_tensor("attention_mask").get_shape().at(1) + 1});
         std::fill_n(lm.get_tensor("attention_mask").data<int64_t>(), lm.get_tensor("attention_mask").get_size(), 1);
         position_ids.data<int64_t>()[0] = int64_t(lm.get_tensor("attention_mask").get_size() - 2);
-        lm.start_async();
         text_streamer.put(out_token);
+        auto start = std::chrono::steady_clock::now();
+        lm.start_async();
         lm.wait();
+        auto end = std::chrono::steady_clock::now();
+        inference_times_s.push_back(std::chrono::duration<double>(end - start).count());
         logits = lm.get_tensor("logits").data<float>();
         out_token = std::max_element(logits, logits + vocab_size) - logits;
+        out_token_ids.push_back(out_token);
+        cnt++;
     }
     text_streamer.end();
     // Model is stateful which means that context (kv-cache) which belongs to a particular
@@ -109,6 +126,14 @@ int main(int argc, char* argv[]) try {
     // While it is not required to reset context in this sample as only one sequence is processed,
     // it is called for education purposes:
     lm.reset_state();
+
+    std::cout << "Output tokens:\n";
+    for (auto id: out_token_ids) std::cout << id << ' ';
+    std::cout << '\n';
+
+    std::sort(inference_times_s.begin(), inference_times_s.end());
+    std::cout << "Median inference speed: " << 1.0 / inference_times_s[inference_times_s.size() / 2] << " tok/s" << std::endl;
+
 } catch (const std::exception& error) {
     std::cerr << error.what() << '\n';
     return EXIT_FAILURE;
