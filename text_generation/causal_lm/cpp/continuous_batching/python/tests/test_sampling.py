@@ -21,19 +21,34 @@ def get_beam_search() -> GenerationConfig:
     generation_config.num_return_sequences = generation_config.num_groups * generation_config.group_size
     return generation_config
 
+def get_multinomial_temperature() -> GenerationConfig:
+    generation_config = GenerationConfig()
+    generation_config.do_sample = True
+    generation_config.temperature = 0.8
+    generation_config.top_k = 5
+    return generation_config
+
+def get_multinomial_temperature_and_top_p() -> GenerationConfig:
+    generation_config = GenerationConfig()
+    generation_config.do_sample = True
+    generation_config.temperature = 0.8
+    generation_config.top_p = 0.2
+    generation_config.top_k = 5
+    return generation_config
+
 def get_test_dataset() -> Tuple[List[str], List[GenerationConfig]]:
     prompts = [
-        "What is OpenVINO?",
-        "How are you?",
-        "What is your name?",
-        "Tell me something about Canada"
-    ]
+            "What is OpenVINO?",
+            "How are you?",
+            "What is your name?",
+            "Tell me something about Canada"
+            ]
     generation_configs = [
-        get_greedy(),
-        get_beam_search(),
-        get_greedy(),
-        get_beam_search()
-    ]
+            get_greedy(),
+            get_beam_search(),
+            get_greedy(),
+            get_beam_search()
+            ]
     return (prompts, generation_configs)
 
 def get_scheduler_config(scheduler_params: dict = None) -> SchedulerConfig:
@@ -51,9 +66,9 @@ def get_scheduler_config(scheduler_params: dict = None) -> SchedulerConfig:
     return scheduler_config
 
 def convert_to_hf(
-    default_generation_config : HFGenerationConfig,
-    generation_config : GenerationConfig
-) -> HFGenerationConfig:
+        default_generation_config : HFGenerationConfig,
+        generation_config : GenerationConfig
+        ) -> HFGenerationConfig:
     kwargs = {}
 
     # generic parameters
@@ -88,12 +103,12 @@ def convert_to_hf(
     return hf_generation_config
 
 def run_hugging_face(
-    model_id : str,
-    prompts: List[str],
-    generation_configs: List[GenerationConfig],
-    use_optimum: bool,
-    tmp_path: Path
-) -> Tuple[List[GenerationResult], str]:
+        model_id : str,
+        prompts: List[str],
+        generation_configs: List[GenerationConfig],
+        use_optimum: bool,
+        tmp_path: Path
+        ) -> Tuple[List[GenerationResult], str]:
     hf_tokenizer = AutoTokenizer.from_pretrained(model_id)
     model = OVModelForCausalLM.from_pretrained(model_id, export=True) if use_optimum else \
             AutoModelForCausalLM.from_pretrained(model_id)
@@ -125,11 +140,11 @@ def run_hugging_face(
     return (generation_results, model_path)
 
 def run_continuous_batching(
-    model_path : Path,
-    scheduler_config : SchedulerConfig,
-    prompts: List[str],
-    generation_configs : List[GenerationConfig]
-) -> List[GenerationResult]:
+        model_path : Path,
+        scheduler_config : SchedulerConfig,
+        prompts: List[str],
+        generation_configs : List[GenerationConfig]
+        ) -> List[GenerationResult]:
     pipe = ContinuousBatchingPipeline(model_path.absolute().as_posix(), scheduler_config)
     return pipe.generate(prompts, generation_configs)
 
@@ -146,7 +161,9 @@ def test_preemption(tmp_path, scheduler_params):
     prompts, generation_configs = get_test_dataset()
     model_id : str = "facebook/opt-125m"
     scheduler_config = get_scheduler_config(scheduler_params)
+    _generate_and_compare_with_hf(model_id, prompts, generation_conigs, tmp_path)
 
+def _generate_and_compare_with_hf(model_id: str, prompts: List[str], generation_configs: List[GenerationConfig], tmp_path: Path):
     (hf_results, model_path) = run_hugging_face(model_id=model_id, prompts=prompts, generation_configs=generation_configs, tmp_path=tmp_path, use_optimum=True)
     my_results : List[GenerationResult] = run_continuous_batching(model_path, scheduler_config, prompts, generation_configs)
 
@@ -165,3 +182,20 @@ def test_preemption(tmp_path, scheduler_params):
         assert len(hf_result.m_generation_ids) == len(my_result.m_generation_ids)
         for hf_text, my_text in zip(hf_result.m_generation_ids, my_result.m_generation_ids):
             assert hf_text == my_text
+
+@pytest.mark.parametrize("generation_config", [get_greedy(), get_beam_search(), get_multinomial_temperature(), get_multinomial_temperature_and_top_p()],
+        ids=["greedy", "beam", "multinomial_temperature", "multinomial_temperature_and_top_p"])
+def test_individual_generation_configs(tmp_path, generation_config):
+    prompts = [
+            "What is OpenVINO?",
+            ]
+    generation_configs = [generation_config]
+    model_id : str = "facebook/opt-125m"
+    _generate_and_compare_with_hf(model_id, prompts, generation_configs, tmp_path)
+
+def test_check_greedy_search(tmp_path):
+    prompts, generation_configs = get_test_dataset()
+    model_id : str = "facebook/opt-125m"
+    _generate_and_compare_with_hf(model_id, prompts, generation_configs, tmp_path)
+
+
