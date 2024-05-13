@@ -8,6 +8,9 @@
 #include <cstdlib>
 #include <limits>
 #include <map>
+#include <algorithm>
+#include <cmath>
+#include <random>
 
 #include "openvino/runtime/tensor.hpp"
 
@@ -199,6 +202,7 @@ public:
 };
 
 class Sampler {
+
     int64_t _greedy_sample(ov::Tensor logits) const {
         ov::Shape logits_shape = logits.get_shape();
         size_t batch_size = logits_shape[0], seq_len = logits_shape[1], vocab_size = logits_shape[2];
@@ -209,11 +213,65 @@ class Sampler {
         return out_token;
     }
 
+    int64_t _multinomial_sample(ov::Tensor logits, float temperature, float top_p) {
+        ov::Shape logits_shape = logits.get_shape();
+        size_t batch_size = logits_shape[0], seq_len = logits_shape[1], vocab_size = logits_shape[2];
+        OPENVINO_ASSERT(batch_size == 1);
+
+        const float * logits_data = logits.data<const float>() + (seq_len - 1) * vocab_size;
+        using LogitWithIdx = std::pair<float, size_t>;
+        std::vector<LogitWithIdx> softmax_vector(vocab_size);
+        for (size_t i = 0; i < softmax_vector.size(); i++) {
+            softmax_vector[i] = LogitWithIdx(logits_data[i], i);
+        }
+        std::sort(softmax_vector.begin(), softmax_vector.end(), [](const LogitWithIdx& lhs, const LogitWithIdx& rhs) {return lhs.first > rhs.first; });
+        float max_logit = softmax_vector[0].first;
+        std::for_each(softmax_vector.begin(), softmax_vector.end(), [max_logit, temperature](LogitWithIdx& val) {val.first = expf((val.first - max_logit) / temperature);});
+
+        float norm_sum = 0.0;
+        for (const auto& val : softmax_vector) {
+            norm_sum += val.first;
+        }
+
+        float probability_sum = 0.0f;
+        size_t nucleus_size = 0;
+        for (const auto& probability_unnormalized : softmax_vector) {
+            probability_sum += probability_unnormalized.first / norm_sum;
+            nucleus_size += 1;
+            if (probability_sum > top_p) break;
+        }
+
+        std::vector<float> multinomial_weights(nucleus_size);
+
+        // additionally renormalize the nucleus scores so that they add up to 1 to serve as multinomial distribution weights
+        for (size_t i = 0; i < nucleus_size; i++) multinomial_weights[i] = softmax_vector[i].first / norm_sum / probability_sum;
+
+        std::cout << "VSHAMPOR: nucleus size is " << nucleus_size << std::endl;
+        std::cout << "VSHAMPOR: nucleus first value is " << multinomial_weights[0] << std::endl;
+        // std::cout << "VSHAMPOR: nucleus logit values are ";
+        // for (auto v : multinomial_weights) std::cout << v << " ";
+        // std::cout << std::endl;
+
+        set_seed(0);
+        auto dist = std::discrete_distribution<size_t>(multinomial_weights.begin(), multinomial_weights.end()); // equivalent to multinomial with number of trials == 1
+        size_t element_to_pick = dist(rng_engine);
+        std::cout << "VSHAMPOR: RNG picked " << element_to_pick << std::endl;
+
+        int64_t out_token = softmax_vector[element_to_pick].second;
+        std::cout << "VSHAMPOR: out_token is " << out_token << std::endl;
+
+        return out_token;
+    }
+
     // request ID => beam search tracking information
     std::map<uint64_t, GroupBeamSearcher> m_beam_search_info;
 
+    std::mt19937 rng_engine;
+
 public:
     SamplerOutput sample(std::vector<SequenceGroup::Ptr> & sequence_groups, ov::Tensor logits);
+
+    void set_seed(size_t seed) { rng_engine.seed(seed); }
 };
 
 SamplerOutput Sampler::sample(std::vector<SequenceGroup::Ptr> & sequence_groups, ov::Tensor logits) {
@@ -238,11 +296,17 @@ SamplerOutput Sampler::sample(std::vector<SequenceGroup::Ptr> & sequence_groups,
         ov::Tensor sequence_group_logits(ov::element::f32, ov::Shape{num_running_sequences, actual_seq_len, vocab_size}, (void *)sequence_group_logits_data);
 
         if (sequence_group->requires_sampling()) {
-            if (sampling_params.is_gready_sampling()) {
+            if (sampling_params.is_greedy_sampling() || sampling_params.is_multinomial()) {
                 std::vector<Sequence::Ptr> running_sequences = sequence_group->get_running_sequences();
                 OPENVINO_ASSERT(running_sequences.size() == 1);
 
-                int64_t sampled_token_id = _greedy_sample(sequence_group_logits);
+                int64_t sampled_token_id;
+                if (sampling_params.is_greedy_sampling()) {
+                    sampled_token_id = _greedy_sample(sequence_group_logits);
+                }
+                else {  // .is_multinomial()
+                    sampled_token_id = _multinomial_sample(sequence_group_logits, sampling_params.temperature, sampling_params.top_p);
+                }
                 // in case of greedy search we always have a single parent sequence to sample from
                 running_sequences[0]->append_token(sampled_token_id, sequence_group_logits.data<const float>()[sampled_token_id]);
 
