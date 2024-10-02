@@ -33,6 +33,7 @@ class ModelRunner {
     AttentionScoresForEachSubsequence m_last_attention_scores;
     size_t m_num_decoder_layers;
     bool m_collect_attention_scores;
+    std::vector<ov::Tensor> m_cache_rotation_coefficients;
 public:
     /**
      * Constructs the ModelRunner.
@@ -64,6 +65,11 @@ public:
      */
     const AttentionScoresForEachSubsequence& get_last_attention_scores() const {
         return m_last_attention_scores;
+    }
+
+    void set_cache_rotation_coefficients(const std::vector<ov::Tensor>& cache_rotation_coefficients_for_each_layer) {
+        // TODO (vshampor): avoid vector copy
+        m_cache_rotation_coefficients = cache_rotation_coefficients_for_each_layer;
     }
 
     /**
@@ -166,6 +172,10 @@ public:
 
         _set_block_indices(m_request, sequence_groups, scheduler_output, total_num_blocks);
 
+        if (!m_cache_rotation_coefficients.empty()) {
+            _set_cache_rotation_coefficients();
+        }
+
         m_request.set_tensor("block_indices_begins", block_indices_begins);
         m_request.set_tensor("max_context_len", max_context_len);
 
@@ -188,6 +198,8 @@ public:
         if (m_collect_attention_scores && m_scheduler_config.use_cache_eviction) {
             _collect_attention_scores(sequence_groups, scheduler_output);
         }
+
+        m_cache_rotation_coefficients.clear();
 
         // return logits
         return m_request.get_tensor("logits");
@@ -234,6 +246,13 @@ private:
 
                 block_offset += num_blocks;
             }
+        }
+    }
+
+    void _set_cache_rotation_coefficients() {
+        for (size_t i = 0; i < m_num_decoder_layers; i++) {
+            auto tensor_name = std::string("cache_rotation_coefficients.") + std::to_string(i);
+            m_request.set_tensor(tensor_name, m_cache_rotation_coefficients[i]);
         }
     }
 
