@@ -405,9 +405,9 @@ void ContinuousBatchingPipeline::ContinuousBatchingImpl::maybe_evict_cache_block
         cache_eviction_algo.register_new_token_scores(attention_scores_for_all_decoder_layers);
         auto logical_blocks_to_evict = cache_eviction_algo.evict_logical_blocks();
 
-        size_t num_blocks_before_eviction = m_scheduler->get_block_tables(seq_id)[0].size();
 
         for (size_t i = 0; i < logical_blocks_to_evict.size(); i++) {
+            size_t num_blocks_before_eviction = m_scheduler->get_block_tables(seq_id)[i].size();
             auto rotation_multipliers =
                 m_cache_rotation_calculator->get_rotation_multipliers(logical_blocks_to_evict[i],
                                                                       num_blocks_before_eviction);
