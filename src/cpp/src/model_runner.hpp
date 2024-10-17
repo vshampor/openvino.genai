@@ -173,7 +173,7 @@ public:
         _set_block_indices(sequence_groups, scheduler_output, total_num_blocks);
 
         if (!m_cache_rotation_coefficients.empty()) {
-            _set_cache_rotation_coefficients();
+            _set_cache_rotation_coefficients(sequence_groups, scheduler_output);
         }
 
         m_request.set_tensor("block_indices_begins", block_indices_begins);
