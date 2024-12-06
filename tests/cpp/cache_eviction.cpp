@@ -571,7 +571,7 @@ const std::vector<CacheRotationCalculatorRefCoefficientsTestStruct> CACHE_ROTATI
                 4,
                 // pre-eviction block 3 rotated left by 2 blocks, coefficients are cos(4) and -sin(4) due to theta == 1.0
                 {
-                        {1,
+                        {1, 4,
                                 {
                                         {0.75680249, 0.75680249},  // block token 0
                                         {0.75680249, 0.75680249}   // block token 1
@@ -591,7 +591,7 @@ const std::vector<CacheRotationCalculatorRefCoefficientsTestStruct> CACHE_ROTATI
                 4,
                 // coefficients are [cos(4 / 1),  -sin(4 / 1)], [cos(4 / sqrt(2)), -sin(4 / sqrt(2))] now
                 {
-                        {1,
+                        {1, 4,
                                 {
                                         {0.75680249, -0.30807174},  // block token 0
                                         {0.75680249, -0.30807174}   // block token 1
@@ -611,7 +611,7 @@ const std::vector<CacheRotationCalculatorRefCoefficientsTestStruct> CACHE_ROTATI
                 // delta of 2 tokens for both blocks
                 // coefficients are [cos(2 / 1),  -sin(2 / 1)], [cos(2 / sqrt(2)), -sin(2 / sqrt(2))]
                 {
-                        {0,
+                        {0, 2,
                                 {
                                         {-0.90929742, -0.98776594},  // block token 0
                                         {-0.90929742, -0.98776594}   // block token 1
@@ -621,7 +621,7 @@ const std::vector<CacheRotationCalculatorRefCoefficientsTestStruct> CACHE_ROTATI
                                         {-0.41614683, 0.15594369}   // block token 1
                                 },
                         },
-                        {1,
+                        {1, 2,
                                 {
                                         {-0.90929742, -0.98776594},  // block token 0
                                         {-0.90929742, -0.98776594}   // block token 1
@@ -643,7 +643,7 @@ const std::vector<CacheRotationCalculatorRefCoefficientsTestStruct> CACHE_ROTATI
                 // and 4 tokens for second remaining block
                 // coefficients are [cos(4 / 1),  -sin(4 / 1)], [cos(4 / sqrt(2)), -sin(4 / sqrt(2))]
                 {
-                        {0,
+                        {0, 2,
                                 {
                                         {-0.90929742, -0.98776594},  // block token 0
                                         {-0.90929742, -0.98776594}   // block token 1
@@ -653,7 +653,7 @@ const std::vector<CacheRotationCalculatorRefCoefficientsTestStruct> CACHE_ROTATI
                                         {-0.41614683, 0.15594369}   // block token 1
                                 },
                         },
-                        {1,
+                        {1, 4,
                                 {
                                         {0.75680249, -0.30807174},  // block token 0
                                         {0.75680249, -0.30807174}   // block token 1

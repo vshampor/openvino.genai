@@ -160,6 +160,7 @@ public:
         }
         size_t logical_block_idx;             /** Logical index of the block AFTER eviction to which the sine and cosine
                                                  coefficients should be applied */
+        size_t rotation_delta;
         RotationCoefficientsPerToken sines;   /** The sine coefficients to be applied to this block's contents for
                                                  rotation, in order of the block's elements */
         RotationCoefficientsPerToken cosines; /** The cosine coefficients to be applied to this block's contents for
@@ -185,6 +186,9 @@ public:
     size_t get_head_size() const {
         return m_head_size;
     }
+
+    const std::vector<std::vector<double>>& get_sin_lut() const;
+    const std::vector<std::vector<double>>& get_cos_lut() const;
 
 private:
     size_t m_block_size;

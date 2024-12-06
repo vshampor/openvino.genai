@@ -301,6 +301,14 @@ namespace ov::genai {
         }
     }
 
+    const std::vector<std::vector<double>>& CacheRotationCalculator::get_sin_lut() const {
+        return m_rope_sin_lut;
+    }
+
+    const std::vector<std::vector<double>>& CacheRotationCalculator::get_cos_lut() const {
+        return m_rope_cos_lut;
+    }
+
     std::vector<CacheRotationCalculator::BlockRotationData> CacheRotationCalculator::get_rotation_coefficients(
         const std::set<size_t>& evicted_block_logical_indices,
         size_t num_logical_blocks_before_eviction) {
@@ -339,6 +347,7 @@ namespace ov::genai {
                         block_rotation_data.sines.push_back(
                             m_rope_sin_lut[current_rotation_delta_in_blocks * m_block_size]);
                     }
+                    block_rotation_data.rotation_delta = current_rotation_delta_in_blocks * m_block_size;
 
                     retval.push_back(block_rotation_data);
                 }
