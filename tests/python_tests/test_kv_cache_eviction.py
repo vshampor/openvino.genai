@@ -247,7 +247,14 @@ def test_optimized_generation_longbench(qwen2_converted_model, test_struct):
     generation_config.num_return_sequences = 1
     generation_config.max_new_tokens = max_new_tokens
 
-    data = datasets.load_dataset('THUDM/LongBench', subset, split='test[:32]')
+    data = datasets.load_dataset('THUDM/LongBench', subset, split=f'test[:{seqs_per_request}]')
+
+    scheduler_config.use_cache_eviction = True
+    if scheduler_config.use_cache_eviction:
+        scheduler_config.cache_eviction_config = LONGBENCH_CACHE_EVICTION_CONFIG
+
+    model_cb_opt = ContinuousBatchingPipeline(models_path.absolute().as_posix(), scheduler_config, "GPU", {})
+
     with tqdm(total=len(data)) as progress_bar:
         batch = []
         answers = []
