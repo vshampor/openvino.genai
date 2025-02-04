@@ -756,6 +756,7 @@ public:
         return m_allocator.get_total_number_of_kv_blocks();
     }
 
+
     /**
      * @brief Forks a sequence, establishing a new sequence from an existing one, reusing
      * currently allocated blocks of the existing sequence.

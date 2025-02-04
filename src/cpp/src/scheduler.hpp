@@ -128,6 +128,10 @@ public:
         m_block_manager->free_sequence(seq_id);
     }
 
+    float get_used_percentage() {
+        return m_block_manager->get_used_percentage();
+    }
+
     void fork_sequence(uint64_t parent_id, uint64_t child_id) {
         m_block_manager->fork_sequence(parent_id, child_id);
     }

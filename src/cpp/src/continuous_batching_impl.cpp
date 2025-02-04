@@ -341,9 +341,13 @@ void ContinuousBatchingPipeline::ContinuousBatchingImpl::step() {
 
     // evict unimportant blocks from KV cache, if requested
     const auto& sched_config = m_scheduler->get_config();
+    std::cout << "VSHAMPOR: usage before eviction is " << m_scheduler->get_used_percentage() << std::endl;
     if (sched_config.use_cache_eviction) {
         _maybe_evict_cache_blocks(sched_config);
     }
+    std::cout << "VSHAMPOR: usage after eviction is " << m_scheduler->get_used_percentage() << std::endl;
+    std::cout <<  std::endl;
+
 
 #ifdef DEBUG_CACHE_STATE_DUMP
     CacheStateDumper dumper_after(CacheStateDumper::get_run_id_for_generation_step(step_count, "eviction"));
@@ -714,6 +718,7 @@ void ContinuousBatchingPipeline::ContinuousBatchingImpl::_maybe_evict_cache_bloc
 
          if (!seq_group_ptr->can_generate_tokens()) {
              // do not evict during prefill
+            std::cout << "VSHAMPOR: seq " << seq_id << " prefilling"  << std::endl;
              continue;
          }
 
@@ -725,6 +730,7 @@ void ContinuousBatchingPipeline::ContinuousBatchingImpl::_maybe_evict_cache_bloc
         m_scheduler->free_blocks_from_sequence(seq_id, logical_blocks_to_evict);
 
         size_t num_blocks_evicted = logical_blocks_to_evict[0].size();
+        std::cout << "VSHAMPOR: seq " << seq_id << " evicted " << num_blocks_evicted << " blocks out of " << seq_group_ptr->get_num_logical_blocks()  << std::endl;
 
         if (seq_group_to_num_blocks_evicted_map.find(seq_group_ptr) != seq_group_to_num_blocks_evicted_map.end()) {
             OPENVINO_ASSERT(seq_group_to_num_blocks_evicted_map[seq_group_ptr] == num_blocks_evicted, "internal error - each sequence in the same group must have the same number of blocks evicted");
