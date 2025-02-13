@@ -495,10 +495,18 @@ private:
     void _initialize_cache(const std::vector<SequenceGroup::Ptr>& sequence_groups) {
         size_t blocks_sum = 0;
         for (auto idx = 0; idx < sequence_groups.size(); idx++) {
-            auto seq_length = sequence_groups[idx]->get_prompt_len() * m_kv_blocks_initial_multiplier;
+            size_t multiplier_cache_size_estimate = sequence_groups[idx]->get_prompt_len() * m_kv_blocks_initial_multiplier;
             auto gen_config = sequence_groups[idx]->get_sampling_parameters();
-            seq_length = std::min(seq_length, sequence_groups[idx]->get_prompt_len() + sequence_groups[idx]->get_max_new_tokens());
-            size_t blocks_num = std::ceil(static_cast<float>(seq_length) / m_block_manager->get_block_size());
+            size_t max_generation_size_in_cache = 0;
+            if (m_config.use_cache_eviction) {
+                max_generation_size_in_cache = std::max(sequence_groups[idx]->get_prompt_len(), m_config.cache_eviction_config.get_max_cache_size());
+            }
+            else {
+                max_generation_size_in_cache = sequence_groups[idx]->get_prompt_len() + sequence_groups[idx]->get_max_new_tokens();
+            }
+
+            size_t cache_size_to_preallocate = std::min(multiplier_cache_size_estimate, max_generation_size_in_cache);
+            size_t blocks_num = std::ceil(static_cast<float>(cache_size_to_preallocate) / m_block_manager->get_block_size());
             if (gen_config.is_beam_search()) {
                 blocks_num *= gen_config.num_beams;
             } else if (gen_config.is_multinomial()) {
