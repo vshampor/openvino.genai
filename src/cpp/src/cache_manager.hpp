@@ -5,6 +5,7 @@
 
 #include <vector>
 #include <list>
+#include <fstream>
 
 #include "openvino/runtime/tensor.hpp"
 #include "paged_attention_transformations.hpp"
@@ -81,6 +82,7 @@ class CacheManager {
 
         return pshape;
     }
+
 
 public:
     CacheManager(ov::InferRequest request, const std::vector<KVHeadConfig>& kv_cache_config) :
@@ -283,6 +285,36 @@ public:
                     value_src_cache_roi.copy_to(value_dst_cache_roi);
                 }
             }
+        }
+    }
+
+    void dump_cache_for_layer(size_t idx, std::string path) {
+        std::ofstream out{path, std::ios::out};
+        const auto& cache_tensor = m_key_cache[0];
+        out << cache_tensor.get_shape() << '\n';
+        out << m_block_size << '\n';
+
+        auto cache_precision = cache_tensor.get_element_type();
+        switch (cache_precision) {
+            case ov::element::Type_t::f32: {
+                auto data = cache_tensor.data<float>();
+                for (size_t i = 0; i < cache_tensor.get_size(); i++) {
+                    out << data[i] << ' ';
+                }
+                out << std::endl;
+                break;
+            }
+
+            case ov::element::Type_t::f16: {
+                auto data = cache_tensor.data<ov::float16>();
+                for (size_t i = 0; i < cache_tensor.get_size(); i++) {
+                    out << data[i] << ' ';
+                }
+                out << std::endl;
+                break;
+            }
+            default:
+                OPENVINO_THROW("Unknown cache precision: ", cache_precision);
         }
     }
 };

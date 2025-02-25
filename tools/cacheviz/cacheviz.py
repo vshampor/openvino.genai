@@ -257,14 +257,7 @@ def load_and_draw_usage(plot_axes: plt.Axes, usage_dump_file: pathlib.Path, curr
 def get_eviction_relation(dump_file_name: str) -> str:
     return 'before' if 'before' in str(dump_file_name) else 'after'
 
-
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--dump_folder", help="Cache info dump folder", required=True)
-    parser.add_argument("--step", help="Step ID to show at startup", required=False, default=0, type=int)
-    args = parser.parse_args()
-    dump_folder = args.dump_folder
-
+def visualize_cache(dump_folder: str):
     dump_folder_path = pathlib.Path(dump_folder)
     step_data = load_data(dump_folder_path)
     allocated_usage_series = get_allocated_usage_series(step_data)
@@ -299,7 +292,8 @@ def main():
         draw_from_step_data(plot_axes, step_data[current_file_idx_displayed])
 
         usage_plot_axes.clear()
-        load_and_draw_usage(usage_plot_axes, usage_dump_file, current_file_idx_displayed // 2, allocated_usage_series=allocated_usage_series, eviction_relation=mode)
+        load_and_draw_usage(usage_plot_axes, usage_dump_file, current_file_idx_displayed // 2,
+                            allocated_usage_series=allocated_usage_series, eviction_relation=mode)
         fig.canvas.draw_idle()
 
     fig.canvas.mpl_connect('key_press_event', on_press)
@@ -309,9 +303,78 @@ def main():
     mode = get_eviction_relation(curr_step_file_data.dump_file_name)
 
     draw_from_step_data(plot_axes, curr_step_file_data)
-    load_and_draw_usage(usage_plot_axes, usage_dump_file, args.step, allocated_usage_series=allocated_usage_series, eviction_relation=mode)
+    load_and_draw_usage(usage_plot_axes, usage_dump_file, args.step, allocated_usage_series=allocated_usage_series,
+                        eviction_relation=mode)
 
     plt.show()
+
+def cache_to_numpy(file_path: pathlib.Path) -> np.ndarray:
+    with open(file_path, 'r') as f:
+        shape_str: str = f.readline()
+        shape = [int(x) for x in shape_str.strip('[]\n').split(',')]
+        block_size_str = f.readline()
+        content_str = f.readline()
+        content_str = content_str.strip('\n')
+        py_arr = [float(x) for x in content_str.split(' ') if x != '']
+        raw_arr = np.array(py_arr, dtype=np.float32)
+        reshaped_arr = raw_arr.reshape(shape)
+        return reshaped_arr
+
+def visualize_diff(left_file: str, right_file: str):
+    left_arr = cache_to_numpy(pathlib.Path(left_file))
+    right_arr = cache_to_numpy(pathlib.Path(right_file))
+    diff_abs = abs(left_arr - right_arr)
+    diff_rel: np.ndarray = (left_arr - right_arr) / (abs(left_arr) + np.finfo(np.float32).eps)
+    left_zero_mask = (left_arr == 0)
+    diff_rel[left_zero_mask] = 0
+
+    fig = plt.figure(figsize=(10, 10))
+    fig.tight_layout()
+
+    raw_plot_axes = fig.add_subplot(311, aspect='auto')
+    value_range = range(left_arr.size)
+    raw_plot_axes.plot(value_range, left_arr.flatten(), right_arr.flatten())
+
+    raw_plot_axes.set_xticks(np.arange(0, left_arr.size, 1000000))
+    raw_plot_axes.set_xlim(0, left_arr.size)
+
+    raw_plot_axes.set_yticks(np.arange(-10, 10, 1))
+    raw_plot_axes.set_ylim(-10, 10)
+    raw_plot_axes.grid(visible=True, which='major', axis='y')
+
+    diff_abs_axes = fig.add_subplot(313, aspect='auto')
+    plot_diff(diff_abs, diff_abs_axes)
+
+    diff_rel_axes = fig.add_subplot(312, aspect='auto')
+    plot_diff(diff_rel, diff_rel_axes)
+
+    plt.show()
+
+def plot_diff(diff_arr, axes):
+    diff_arr = diff_arr.mean(axis=(1, 2, 3))
+    axes.plot(np.arange(0, diff_arr.size, 1), diff_arr)
+
+    axes.set_xticks(np.arange(0, diff_arr.size, 10))
+    axes.set_xlim(0, diff_arr.size)
+
+    hi_lim = max(1, diff_arr.max())
+    axes.set_yticks(np.arange(0, hi_lim, hi_lim / 10))
+    axes.set_ylim(0, hi_lim)
+    axes.grid(visible=True, which='major', axis='y')
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--dump_folder", required=False, help="Cache info dump folder")
+    parser.add_argument("--step", required=False, help="Step ID to show at startup", default=0, type=int)
+    parser.add_argument("--diff_left", required=False, help="Left cache content file to compare")
+    parser.add_argument("--diff_right", required=False, help="Right cache content file to compare")
+
+    args = parser.parse_args()
+    if args.dump_folder is not None:
+        visualize_cache(args.dump_folder)
+    elif args.diff_left is not None:
+        visualize_diff(args.diff_left, args.diff_right)
+
 
 
 if __name__ == "__main__":

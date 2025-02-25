@@ -291,6 +291,8 @@ void ContinuousBatchingPipeline::ContinuousBatchingImpl::step() {
 
     Scheduler::Output scheduler_output;
 
+    bool is_rotating = false;
+
     {
         static ManualTimer scheduling_timer("scheduling");
         scheduling_timer.start();
@@ -304,8 +306,10 @@ void ContinuousBatchingPipeline::ContinuousBatchingImpl::step() {
         m_pipeline_metrics.avg_cache_usage = _get_current_running_average_cache_usage();
 
         const auto& sched_config = m_scheduler->get_config();
+
         if (sched_config.use_cache_eviction && sched_config.cache_eviction_config.apply_rotation) {
             _compute_cache_rotation_data(m_requests, scheduler_output);
+            is_rotating = (m_current_step_rotation_deltas[0].get_size() != 0);
             m_model_runner->set_cache_rotation_data(std::move(m_current_step_rotated_block_indices_per_sequence),
                                                     std::move(m_current_step_rotation_deltas));
         }
@@ -326,11 +330,21 @@ void ContinuousBatchingPipeline::ContinuousBatchingImpl::step() {
     }
     ov::Tensor logits;
 
+    if (is_rotating) {
+        m_scheduler->dump_cache_for_layer(0, std::string{"before_0.txt"});
+    }
+
     {
         static ManualTimer timer("forward");
         timer.start();
         logits = m_model_runner->forward(m_requests, scheduler_output);
         timer.end();
+    }
+
+
+    if (is_rotating) {
+        m_scheduler->dump_cache_for_layer(0, std::string{"after_0.txt"});
+        std::terminate();
     }
 
 #ifdef DEBUG_CACHE_STATE_DUMP
