@@ -344,6 +344,17 @@ void ContinuousBatchingPipeline::ContinuousBatchingImpl::step() {
 
     if (is_rotating) {
         m_scheduler->dump_cache_for_layer(0, std::string{"after_0.txt"});
+        std::set<size_t> occupied_blocks;
+        for (const auto& seq_id_and_blocks_per_layer : scheduler_output.m_block_tables) {
+            for (const auto& occupied_block: seq_id_and_blocks_per_layer.second[0]) {
+                occupied_blocks.insert(occupied_block->get_index());
+            }
+        }
+        std::cout << "VSHAMPOR: occupied blocks are" << std::endl;
+        for (size_t occupied_block_id : occupied_blocks) {
+            std::cout << occupied_block_id << ' ';
+        }
+        std::cout << std::endl;
         std::terminate();
     }
 
