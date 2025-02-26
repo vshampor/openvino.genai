@@ -290,7 +290,9 @@ public:
 
     void dump_cache_for_layer(size_t idx, std::string path) {
         std::ofstream out{path, std::ios::out};
-        const auto& cache_tensor = m_key_cache[0];
+        const auto& internal_cache_tensor = m_key_cache[0];
+        ov::Tensor cache_tensor = ov::Tensor(internal_cache_tensor.get_element_type(), internal_cache_tensor.get_shape());
+        internal_cache_tensor.copy_to(cache_tensor);
         out << cache_tensor.get_shape() << '\n';
         out << m_block_size << '\n';
 
