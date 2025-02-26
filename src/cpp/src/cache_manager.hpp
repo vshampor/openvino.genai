@@ -171,6 +171,7 @@ public:
                 ov::element::Type value_precision = get_value_cache_precision(decoder_layer_id);
 
                 ov::Tensor key_cache(key_precision, key_cache_shape);
+                std::memset(key_cache.data(), 0, key_cache.get_byte_size());
                 ov::Tensor value_cache(value_precision, value_cache_shape);
 
                 auto key_cache_roi_end = static_cast<unsigned char*>(key_cache.data());
